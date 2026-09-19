@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useMemo } from 'react';
+import { Suspense, useCallback, useEffect, useMemo } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, ContactShadows } from '@react-three/drei';
 import { motion } from 'framer-motion';
@@ -6,8 +6,7 @@ import * as THREE from 'three';
 
 import useMuseumStore from '../../store/useMuseumStore';
 import { SCULPTURES } from '../../data/sculptures';
-import SculptureModel from './SculptureModel';
-import ProceduralBustFallback from './ProceduralBustFallback';
+import SculptureModel, { ModelLoadingBadge, preloadSculptureModel } from './SculptureModel';
 import SculptureHotspots from './SculptureHotspots';
 import HotspotModal from './HotspotModal';
 
@@ -86,8 +85,8 @@ function ChamberScene({ sculpture }) {
       <StudioLighting accentColor={sculpture.accentColor} />
 
       {/* Auto-centered 3D sculpture model floating cleanly at (0, 0, 0) */}
-      {/* ProceduralBustFallback shown during load — prevents blank canvas on slow connections */}
-      <Suspense fallback={<ProceduralBustFallback accentColor={sculpture.accentColor} />}>
+      {/* ModelLoadingBadge: in-Canvas spinner so the scene never goes blank */}
+      <Suspense fallback={<ModelLoadingBadge accentColor={sculpture.accentColor} />}>
         <SculptureModel
           modelUrl={sculpture.modelUrl}
           accentColor={sculpture.accentColor}
@@ -251,6 +250,15 @@ export default function SculptureChamber() {
 
   const handleBack   = useCallback(() => clearActiveSculpture(), [clearActiveSculpture]);
   const handleSelect = useCallback((id) => setActiveSculpture(id), [setActiveSculpture]);
+
+  // Preload prev + next models so navigation feels instant
+  useEffect(() => {
+    const total   = SCULPTURES.length;
+    const prevIdx = (currentIdx - 1 + total) % total;
+    const nextIdx = (currentIdx + 1) % total;
+    preloadSculptureModel(SCULPTURES[prevIdx].modelUrl);
+    preloadSculptureModel(SCULPTURES[nextIdx].modelUrl);
+  }, [currentIdx]);
 
   return (
     <div
