@@ -1,40 +1,77 @@
-import { Suspense, useCallback, useEffect, useMemo } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, ContactShadows } from '@react-three/drei';
-import { motion } from 'framer-motion';
+import { OrbitControls, ContactShadows, useProgress } from '@react-three/drei';
+import { motion, AnimatePresence } from 'framer-motion';
 import * as THREE from 'three';
 
 import useMuseumStore from '../../store/useMuseumStore';
 import { SCULPTURES } from '../../data/sculptures';
-import SculptureModel, { ModelLoadingBadge, ModelErrorBoundary, preloadSculptureModel } from './SculptureModel';
+import SculptureModel, { preloadSculptureModel } from './SculptureModel';
 import SculptureHotspots from './SculptureHotspots';
 import HotspotModal from './HotspotModal';
 
-/* ─── HTML loading overlay shown while GLB parses ────────────────── */
-function LoadingOverlay({ name, accentColor }) {
+/* ─── Real-time streaming progress indicator ─────────────────────── */
+function StreamingProgressHUD({ progress, accentColor, isTimedOut }) {
+  if (isTimedOut) return null;
+
   return (
-    <div
-      className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 pointer-events-none"
-      style={{ background: 'rgba(10, 10, 15, 0.8)', backdropFilter: 'blur(10px)' }}
+    <motion.div
+      initial={{ opacity: 0, y: -20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      className="absolute top-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3.5 px-4 py-2.5 rounded-2xl bg-slate-900/90 backdrop-blur-md border border-slate-800/90 shadow-2xl pointer-events-none"
     >
-      <div className="relative w-14 h-14">
-        <div
-          className="loading-ring absolute inset-0 rounded-full border-[3px] border-transparent"
-          style={{ borderTopColor: accentColor, borderRightColor: `${accentColor}44` }}
-        />
-        <div className="absolute inset-2 rounded-full flex items-center justify-center font-mono text-[9px] text-slate-400">
-          3D
+      <div
+        className="w-4 h-4 rounded-full border-2 border-slate-700 border-t-transparent animate-spin"
+        style={{ borderTopColor: accentColor }}
+      />
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center justify-between gap-6 font-mono text-[11px]">
+          <span className="text-slate-300">Đang tải mô hình 3D</span>
+          <span className="font-bold" style={{ color: accentColor }}>
+            {progress > 0 ? `${progress}%` : 'Đang kết nối…'}
+          </span>
+        </div>
+        <div className="w-48 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all duration-300 ease-out"
+            style={{
+              width: `${Math.max(progress, 4)}%`,
+              backgroundColor: accentColor,
+            }}
+          />
         </div>
       </div>
-      <div className="text-center">
-        <p className="font-heading font-semibold text-slate-100 text-sm">
-          {name}
-        </p>
-        <p className="font-mono text-[10px] text-slate-400 mt-1 tracking-widest uppercase">
-          Đang tải mô hình 3D…
-        </p>
+    </motion.div>
+  );
+}
+
+/* ─── 15s Timeout safeguard toast ────────────────────────────────── */
+function TimeoutSafeguardToast({ onRetry, accentColor }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -20, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -20, scale: 0.95 }}
+      className="absolute top-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-5 py-3 rounded-2xl bg-slate-900/95 backdrop-blur-md border border-red-500/50 shadow-2xl text-slate-100"
+    >
+      <div className="flex items-center gap-2">
+        <span className="text-red-400 text-base">⚠</span>
+        <span className="font-mono text-xs text-slate-200">
+          Tải mô hình quá lâu (&gt;15s)
+        </span>
       </div>
-    </div>
+      <button
+        id="retry-model-load"
+        onClick={onRetry}
+        className="px-3.5 py-1.5 rounded-xl font-mono text-xs font-semibold tracking-wider uppercase transition-all duration-200 bg-red-500/20 border border-red-500/60 text-red-300 hover:bg-red-500/30 hover:text-white active:scale-95 shadow-lg"
+        style={{
+          boxShadow: `0 0 15px ${accentColor}33`,
+        }}
+      >
+        Tải lại tượng
+      </button>
+    </motion.div>
   );
 }
 
@@ -44,10 +81,10 @@ function StudioLighting({ accentColor }) {
 
   return (
     <>
-      {/* Hemisphere light guarantees no mesh is fully black — sky vs ground */}
+      {/* Hemisphere light guarantees no mesh is fully black */}
       <hemisphereLight intensity={0.7} color="#e2e8f0" groundColor="#1e293b" />
 
-      {/* Strong overhead key light */}
+      {/* Overhead key light */}
       <directionalLight
         position={[0, 8, 4]}
         intensity={2.2}
@@ -60,10 +97,10 @@ function StudioLighting({ accentColor }) {
       {/* Front fill */}
       <directionalLight position={[5, 4, 7]} intensity={1.6} color="#f1f5f9" />
 
-      {/* Soft back-left counter fill */}
+      {/* Back counter fill */}
       <directionalLight position={[-5, -2, -5]} intensity={0.8} color="#94a3b8" />
 
-      {/* Warm accent rim lights per thinker */}
+      {/* Accent rim lights */}
       <pointLight position={[-4, 2, -2]} intensity={1.4} color={accent} />
       <pointLight position={[4, -1, -2]} intensity={0.7} color={accent} />
     </>
@@ -71,20 +108,24 @@ function StudioLighting({ accentColor }) {
 }
 
 /* ─── 3D Chamber Scene ───────────────────────────────────────────── */
-function ChamberScene({ sculpture }) {
+function ChamberScene({ sculpture, onLoaded, onProgress, retryKey }) {
   return (
     <>
       <StudioLighting accentColor={sculpture.accentColor} />
 
-      {/* Model wrapped in its own ErrorBoundary — failed loads show fallback, not blank */}
-      <ModelErrorBoundary accentColor={sculpture.accentColor} modelUrl={sculpture.modelUrl}>
-        <Suspense fallback={<ModelLoadingBadge accentColor={sculpture.accentColor} />}>
-          <SculptureModel
-            modelUrl={sculpture.modelUrl}
-            accentColor={sculpture.accentColor}
-          />
-        </Suspense>
-      </ModelErrorBoundary>
+      {/*
+       * Isolated Suspense: ONLY wraps the 3D model.
+       * Camera, lighting, OrbitControls, and shadows remain completely unblocked.
+       */}
+      <Suspense fallback={null}>
+        <SculptureModel
+          key={`${sculpture.modelUrl}-${retryKey}`}
+          modelUrl={sculpture.modelUrl}
+          accentColor={sculpture.accentColor}
+          onLoaded={onLoaded}
+          onProgress={onProgress}
+        />
+      </Suspense>
 
       {/* Contact shadow floating below the sculpture */}
       <ContactShadows
@@ -101,7 +142,7 @@ function ChamberScene({ sculpture }) {
         accentColor={sculpture.accentColor}
       />
 
-      {/* Precise orbit controls centered at geometric center */}
+      {/* Orbit controls centered at geometric center */}
       <OrbitControls
         enablePan={false}
         enableZoom
@@ -244,7 +285,55 @@ export default function SculptureChamber() {
   const handleBack   = useCallback(() => clearActiveSculpture(), [clearActiveSculpture]);
   const handleSelect = useCallback((id) => setActiveSculpture(id), [setActiveSculpture]);
 
-  // Preload prev + next models so navigation feels instant
+  // Loading, progress, and timeout states
+  const [isModelRendered, setIsModelRendered] = useState(false);
+  const [streamProgress, setStreamProgress]   = useState(0);
+  const [isTimedOut, setIsTimedOut]           = useState(false);
+  const [retryKey, setRetryKey]               = useState(0);
+
+  // useProgress from drei tracks Three.js GLTFLoader parsing
+  const { active: threeActive, progress: threeProgress } = useProgress();
+
+  // Reset states & arm 15s timeout safeguard on sculpture change or retry
+  useEffect(() => {
+    setIsModelRendered(false);
+    setStreamProgress(0);
+    setIsTimedOut(false);
+
+    const timer = setTimeout(() => {
+      setIsTimedOut(true);
+    }, 15000);
+
+    return () => clearTimeout(timer);
+  }, [activeSculptureId, retryKey]);
+
+  // Called when ModelInstance finishes layout & position normalization
+  const handleModelLoaded = useCallback(() => {
+    setIsModelRendered(true);
+    setIsTimedOut(false);
+  }, []);
+
+  // Called during stream fetching
+  const handleStreamProgress = useCallback((pct) => {
+    setStreamProgress(pct);
+  }, []);
+
+  // Retry action for timeout toast
+  const handleRetry = useCallback(() => {
+    setIsTimedOut(false);
+    setIsModelRendered(false);
+    setStreamProgress(0);
+    setRetryKey((k) => k + 1);
+  }, []);
+
+  // Effective progress: combine network stream progress and Three.js parsing progress
+  const effectiveProgress = useMemo(() => {
+    if (isModelRendered) return 100;
+    const pThree = threeActive ? Math.round(threeProgress) : 0;
+    return Math.max(streamProgress, pThree);
+  }, [isModelRendered, streamProgress, threeActive, threeProgress]);
+
+  // Preload prev + next models into Cache API so navigation feels instant
   useEffect(() => {
     const total   = SCULPTURES.length;
     const prevIdx = (currentIdx - 1 + total) % total;
@@ -272,14 +361,34 @@ export default function SculptureChamber() {
         dpr={[1, 1.5]}
         style={{ background: '#0a0a0f' }}
       >
-        <ChamberScene key={activeSculptureId} sculpture={sculpture} />
+        <ChamberScene
+          sculpture={sculpture}
+          onLoaded={handleModelLoaded}
+          onProgress={handleStreamProgress}
+          retryKey={retryKey}
+        />
       </Canvas>
 
-      <Suspense fallback={
-        <LoadingOverlay name={sculpture.name} accentColor={sculpture.accentColor} />
-      }>
-        {null}
-      </Suspense>
+      {/* Real-time Streaming Progress HUD */}
+      <AnimatePresence>
+        {!isModelRendered && !isTimedOut && (
+          <StreamingProgressHUD
+            progress={effectiveProgress}
+            accentColor={sculpture.accentColor}
+            isTimedOut={isTimedOut}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* 15-Second Auto-Timeout Safeguard Toast */}
+      <AnimatePresence>
+        {isTimedOut && !isModelRendered && (
+          <TimeoutSafeguardToast
+            onRetry={handleRetry}
+            accentColor={sculpture.accentColor}
+          />
+        )}
+      </AnimatePresence>
 
       {/* UI Overlays */}
       <BackButton onBack={handleBack} />

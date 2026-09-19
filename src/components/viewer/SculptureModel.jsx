@@ -1,12 +1,84 @@
-import { Component, useLayoutEffect, useMemo } from 'react';
-import { useGLTF } from '@react-three/drei';
+import React, { Component, useLayoutEffect, useMemo, useRef, useState, useEffect } from 'react';
+import { useLoader } from '@react-three/fiber';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import * as THREE from 'three';
 import ProceduralBustFallback from './ProceduralBustFallback';
 
-/* ─── Draco decoder — required for KHR_draco_mesh_compression (e.g. marx.glb) ── */
-useGLTF.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
+const dracoLoader = new DRACOLoader();
+dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
 
-/* ─── Error Boundary ─────────────────────────────────────────────── */
+// In-memory cache for blob URLs across component re-renders
+const blobUrlCache = new Map();
+
+export async function fetchWithCache(url, onProgress) {
+  if (!url) return url;
+
+  if (blobUrlCache.has(url)) {
+    if (onProgress) onProgress(100);
+    return blobUrlCache.get(url);
+  }
+
+  if ('caches' in window) {
+    try {
+      const cache = await caches.open('hall-of-thinkers-v1');
+      const cachedResponse = await cache.match(url);
+      if (cachedResponse) {
+        console.info(`[Cache HIT] ${url}`);
+        if (onProgress) onProgress(100);
+        const blob = await cachedResponse.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        blobUrlCache.set(url, blobUrl);
+        return blobUrl;
+      }
+
+      console.info(`[Cache MISS] Fetching ${url}`);
+      const response = await fetch(url);
+      if (response.ok) {
+        const contentLength = response.headers.get('content-length');
+        const totalBytes = contentLength ? parseInt(contentLength, 10) : 0;
+
+        let blob;
+        if (response.body && totalBytes > 0 && typeof ReadableStream !== 'undefined') {
+          const reader = response.body.getReader();
+          const chunks = [];
+          let receivedBytes = 0;
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+            receivedBytes += value.length;
+            if (onProgress) {
+              const pct = Math.min(99, Math.round((receivedBytes / totalBytes) * 100));
+              onProgress(pct);
+            }
+          }
+          blob = new Blob(chunks);
+        } else {
+          blob = await response.blob();
+        }
+
+        if (onProgress) onProgress(100);
+
+        try {
+          await cache.put(url, new Response(blob, { headers: response.headers }));
+        } catch (cacheErr) {
+          console.warn('[fetchWithCache] Cache put error:', cacheErr);
+        }
+
+        const blobUrl = URL.createObjectURL(blob);
+        blobUrlCache.set(url, blobUrl);
+        return blobUrl;
+      }
+    } catch (err) {
+      console.warn('[fetchWithCache] Cache API error, falling back to direct URL:', err);
+    }
+  }
+
+  return url;
+}
+
 export class ModelErrorBoundary extends Component {
   constructor(props) {
     super(props);
@@ -18,140 +90,134 @@ export class ModelErrorBoundary extends Component {
   }
 
   componentDidCatch(error) {
-    console.warn(
-      `[SculptureModel] Failed to load: ${this.props.modelUrl}\n`,
-      error?.message ?? error
-    );
+    console.error(`[SculptureModel] Error loading ${this.props.modelUrl}:`, error);
+    if (this.props.onError) {
+      this.props.onError(error);
+    }
+  }
+
+  componentDidUpdate(prevProps) {
+    if (prevProps.modelUrl !== this.props.modelUrl && this.state.hasError) {
+      this.setState({ hasError: false });
+    }
   }
 
   render() {
     if (this.state.hasError) {
-      return <ProceduralBustFallback accentColor={this.props.accentColor} />;
+      return null;
     }
     return this.props.children;
   }
 }
 
-/* ─── Inner GLB loader ───────────────────────────────────────────── */
-function GLBModel({ modelUrl }) {
-  // true = enable Draco decoder support
-  const { scene } = useGLTF(modelUrl, true);
+export function SculptureModel({ modelUrl, accentColor = '#888888', onLoaded, onProgress, onError }) {
+  const [blobUrl, setBlobUrl] = useState(null);
+  const [loadError, setLoadError] = useState(null);
+  const groupRef = useRef();
 
-  // Deep clone so multiple mounts (cached GLTF) never share transform state
-  const clonedScene = useMemo(() => {
-    if (!scene) return null;
-    console.info(`[SculptureModel] Loaded: ${modelUrl}`);
-    return scene.clone(true);
-  }, [scene, modelUrl]);
+  useEffect(() => {
+    let active = true;
+    setBlobUrl(null);
+    setLoadError(null);
 
-  useLayoutEffect(() => {
-    if (!clonedScene) return;
-
-    // 1. Compute true bounding box
-    const box    = new THREE.Box3().setFromObject(clonedScene);
-    const size   = new THREE.Vector3();
-    const center = new THREE.Vector3();
-    box.getSize(size);
-    box.getCenter(center);
-
-    // 2. Guard against empty / degenerate meshes
-    const maxDim = Math.max(size.x, size.y, size.z);
-    const targetScale = maxDim > 0.001 ? 2.5 / maxDim : 1;
-    clonedScene.scale.setScalar(targetScale);
-
-    // 3. Translate so the geometric center sits exactly at world (0, 0, 0)
-    clonedScene.position.set(
-      -center.x * targetScale,
-      -center.y * targetScale,
-      -center.z * targetScale
-    );
-
-    // 4. Shadows + material visibility fix
-    clonedScene.traverse((child) => {
-      if (!child.isMesh) return;
-      child.castShadow    = true;
-      child.receiveShadow = true;
-      const mats = Array.isArray(child.material) ? child.material : [child.material];
-      mats.forEach((mat) => {
-        if (!mat) return;
-        mat.side        = THREE.FrontSide; // correct for well-formed meshes; prevents z-fighting
-        mat.roughness   = 0.38;
-        mat.metalness   = 0.08;
-        mat.needsUpdate = true;
+    fetchWithCache(modelUrl, onProgress)
+      .then((url) => {
+        if (active) setBlobUrl(url);
+      })
+      .catch((err) => {
+        if (active) {
+          setLoadError(err.message);
+          if (onError) onError(err);
+        }
       });
-    });
 
-    console.info(
-      `[SculptureModel] Centered: scale=${targetScale.toFixed(3)}, ` +
-      `center=(${center.x.toFixed(2)}, ${center.y.toFixed(2)}, ${center.z.toFixed(2)})`
-    );
-  }, [clonedScene]);
+    return () => {
+      active = false;
+    };
+  }, [modelUrl]);
 
-  if (!clonedScene) return null;
-
-  return <primitive object={clonedScene} />;
-}
-
-/* ─── In-Canvas loading badge (used as Suspense fallback) ──────────── */
-import { Html } from '@react-three/drei';
-
-export function ModelLoadingBadge({ accentColor = '#888' }) {
-  return (
-    <Html center position={[0, 0, 0]} zIndexRange={[200, 300]}>
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 10,
-          pointerEvents: 'none',
-          userSelect: 'none',
-        }}
-      >
-        <div
-          style={{
-            width: 44,
-            height: 44,
-            borderRadius: '50%',
-            border: `3px solid ${accentColor}22`,
-            borderTopColor: accentColor,
-            borderRightColor: `${accentColor}88`,
-            animation: 'spin-ring 1.1s linear infinite',
-          }}
-        />
-        <span
-          style={{
-            fontFamily: "'JetBrains Mono', monospace",
-            fontSize: 9,
-            letterSpacing: '0.2em',
-            textTransform: 'uppercase',
-            color: accentColor,
-            opacity: 0.8,
-          }}
-        >
-          Đang tải…
-        </span>
-      </div>
-    </Html>
-  );
-}
-
-/* ─── Public SculptureModel ──────────────────────────────────────── */
-export function SculptureModel({ modelUrl, accentColor = '#888888' }) {
   if (!modelUrl) {
     return <ProceduralBustFallback accentColor={accentColor} />;
   }
 
+  if (loadError) {
+    console.error(`Failed to load ${modelUrl}:`, loadError);
+    return null;
+  }
+
+  if (!blobUrl) return null;
+
   return (
-    <ModelErrorBoundary accentColor={accentColor} modelUrl={modelUrl}>
-      <GLBModel modelUrl={modelUrl} />
+    <ModelErrorBoundary modelUrl={modelUrl} onError={onError}>
+      <ModelInstance blobUrl={blobUrl} groupRef={groupRef} onLoaded={onLoaded} />
     </ModelErrorBoundary>
   );
 }
 
-/* ─── Preload helper for adjacent models ────────────────────────── */
+function ModelInstance({ blobUrl, groupRef, onLoaded }) {
+  const gltf = useLoader(GLTFLoader, blobUrl, (loader) => {
+    loader.setDRACOLoader(dracoLoader);
+  });
+
+  const clonedScene = useMemo(() => {
+    if (!gltf || !gltf.scene) return null;
+    return gltf.scene.clone(true);
+  }, [gltf]);
+
+  useLayoutEffect(() => {
+    if (!clonedScene) return;
+
+    const box = new THREE.Box3().setFromObject(clonedScene);
+    const size = new THREE.Vector3();
+    const center = new THREE.Vector3();
+    box.getSize(size);
+    box.getCenter(center);
+
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const targetScale = maxDim > 0.001 ? 2.4 / maxDim : 1;
+    clonedScene.scale.setScalar(targetScale);
+
+    clonedScene.position.x = -center.x * targetScale;
+    clonedScene.position.y = -center.y * targetScale;
+    clonedScene.position.z = -center.z * targetScale;
+
+    clonedScene.traverse((child) => {
+      if (child.isMesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+        if (child.material) {
+          if (Array.isArray(child.material)) {
+            child.material.forEach((mat) => {
+              if (mat) {
+                mat.side = THREE.DoubleSide;
+                mat.needsUpdate = true;
+              }
+            });
+          } else {
+            child.material.side = THREE.DoubleSide;
+            child.material.needsUpdate = true;
+          }
+        }
+      }
+    });
+
+    if (onLoaded) {
+      onLoaded();
+    }
+  }, [clonedScene, onLoaded]);
+
+  if (!clonedScene) return null;
+
+  return (
+    <group ref={groupRef}>
+      <primitive object={clonedScene} />
+    </group>
+  );
+}
+
 export function preloadSculptureModel(modelUrl) {
-  if (modelUrl) useGLTF.preload(modelUrl);
+  if (!modelUrl) return;
+  fetchWithCache(modelUrl).catch(() => {});
 }
 
 export default SculptureModel;
