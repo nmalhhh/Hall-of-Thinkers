@@ -1,9 +1,17 @@
 /**
  * SCULPTURES — The Hall of Thinkers
  * 9 entries mapped to local .glb files in public/models/
- * Base path configured for GitHub Pages deployment: /Hall-of-Thinkers/
+ *
+ * modelUrl uses import.meta.env.BASE_URL so it correctly resolves to:
+ *   - Dev:  /models/<name>.glb
+ *   - Prod: /Hall-of-Thinkers/models/<name>.glb
+ *
  * Aligned with MLN111 curriculum (Chương 1, 2, 3 - NXB Chính trị quốc gia Sự thật)
  */
+const BASE = import.meta.env.BASE_URL.endsWith('/')
+  ? import.meta.env.BASE_URL
+  : `${import.meta.env.BASE_URL}/`;
+
 export const SCULPTURES = [
   {
     id: 'socrates',
@@ -16,7 +24,7 @@ export const SCULPTURES = [
     accentColor: '#f97316',
     imageUrl:
       'https://upload.wikimedia.org/wikipedia/commons/thumb/b/bc/Socrate_du_Louvre.jpg/480px-Socrate_du_Louvre.jpg',
-    modelUrl: '/Hall-of-Thinkers/models/socrates.glb',
+    modelUrl: `${BASE}models/socrates.glb`,
     hotspots: [
       {
         id: 's1',
@@ -45,7 +53,7 @@ export const SCULPTURES = [
     accentColor: '#3b82f6',
     imageUrl:
       'https://upload.wikimedia.org/wikipedia/commons/thumb/8/88/Plato_Silanion_Musei_Capitolini_MC1377.jpg/480px-Plato_Silanion_Musei_Capitolini_MC1377.jpg',
-    modelUrl: '/Hall-of-Thinkers/models/plato.glb',
+    modelUrl: `${BASE}models/plato.glb`,
     hotspots: [
       {
         id: 'p1',
@@ -74,7 +82,7 @@ export const SCULPTURES = [
     accentColor: '#10b981',
     imageUrl:
       'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ae/Aristotle_Altemps_Inv8575.jpg/480px-Aristotle_Altemps_Inv8575.jpg',
-    modelUrl: '/Hall-of-Thinkers/models/aristotle.glb',
+    modelUrl: `${BASE}models/aristotle.glb`,
     hotspots: [
       {
         id: 'a1',
@@ -103,7 +111,7 @@ export const SCULPTURES = [
     accentColor: '#a855f7',
     imageUrl:
       'https://upload.wikimedia.org/wikipedia/commons/thumb/0/08/Hegel_portrait_by_Schlesinger_1831.jpg/480px-Hegel_portrait_by_Schlesinger_1831.jpg',
-    modelUrl: '/Hall-of-Thinkers/models/hegel.glb',
+    modelUrl: `${BASE}models/hegel.glb`,
     hotspots: [
       {
         id: 'h1',
@@ -131,8 +139,8 @@ export const SCULPTURES = [
       'Biểu trưng cho chủ nghĩa duy vật nhân bản; giải phóng con người khỏi thần quyền nhưng còn hạn chế trừu tượng, phi lịch sử.',
     accentColor: '#eab308',
     imageUrl:
-      'https://upload.wikimedia.org/wikipedia/commons/thumb/8/80/Michelangelo%27s_David_-_right_view_2.jpg/480px-Michelangelo%27s_David_-_right_view_2.jpg',
-    modelUrl: '/Hall-of-Thinkers/models/david.glb',
+      "https://upload.wikimedia.org/wikipedia/commons/thumb/8/80/Michelangelo%27s_David_-_right_view_2.jpg/480px-Michelangelo%27s_David_-_right_view_2.jpg",
+    modelUrl: `${BASE}models/david.glb`,
     hotspots: [
       {
         id: 'd1',
@@ -162,7 +170,7 @@ export const SCULPTURES = [
     accentColor: '#ef4444',
     imageUrl:
       'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d4/Karl_Marx_001.jpg/480px-Karl_Marx_001.jpg',
-    modelUrl: '/Hall-of-Thinkers/models/marx.glb',
+    modelUrl: `${BASE}models/marx.glb`,
     hotspots: [
       {
         id: 'm1',
@@ -191,7 +199,7 @@ export const SCULPTURES = [
     accentColor: '#dc2626',
     imageUrl:
       'https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Lenin_CL.jpg/480px-Lenin_CL.jpg',
-    modelUrl: '/Hall-of-Thinkers/models/lenin.glb',
+    modelUrl: `${BASE}models/lenin.glb`,
     hotspots: [
       {
         id: 'l1',
@@ -220,7 +228,7 @@ export const SCULPTURES = [
     accentColor: '#06b6d4',
     imageUrl:
       'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6f/The_Thinker%2C_Rodin_Museum.jpg/480px-The_Thinker%2C_Rodin_Museum.jpg',
-    modelUrl: '/Hall-of-Thinkers/models/thinker.glb',
+    modelUrl: `${BASE}models/thinker.glb`,
     hotspots: [
       {
         id: 't1',
@@ -249,7 +257,7 @@ export const SCULPTURES = [
     accentColor: '#f97316',
     imageUrl:
       'https://upload.wikimedia.org/wikipedia/commons/thumb/6/69/Prometheus_carrying_fire_%281702%29_by_Nicolas-S%C3%A9bastien_Adam_-_Louvre_MR_1744.jpg/480px-Prometheus_carrying_fire_%281702%29_by_Nicolas-S%C3%A9bastien_Adam_-_Louvre_MR_1744.jpg',
-    modelUrl: '/Hall-of-Thinkers/models/prometheus.glb',
+    modelUrl: `${BASE}models/prometheus.glb`,
     hotspots: [
       {
         id: 'pr1',
@@ -263,7 +271,7 @@ export const SCULPTURES = [
         position: [-0.25, 0.1, 0.65],
         title: 'Bản chất Con người',
         description:
-          'Con người là thực thể sinh học - xã hội; trong tính hiện thực của nó, bản chất con người là tổng hòa những quan hệ xã hội (C. Mác, Luận cương về Feuerbach).',
+          '"Trong tính hiện thực của nó, bản chất con người là tổng hòa những quan hệ xã hội." (C. Mác, Luận cương về Feuerbach, 1845)',
       },
     ],
   },

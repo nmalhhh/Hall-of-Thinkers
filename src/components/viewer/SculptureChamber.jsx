@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import useMuseumStore from '../../store/useMuseumStore';
 import { SCULPTURES } from '../../data/sculptures';
 import SculptureModel from './SculptureModel';
+import ProceduralBustFallback from './ProceduralBustFallback';
 import SculptureHotspots from './SculptureHotspots';
 import HotspotModal from './HotspotModal';
 
@@ -85,7 +86,8 @@ function ChamberScene({ sculpture }) {
       <StudioLighting accentColor={sculpture.accentColor} />
 
       {/* Auto-centered 3D sculpture model floating cleanly at (0, 0, 0) */}
-      <Suspense fallback={null}>
+      {/* ProceduralBustFallback shown during load — prevents blank canvas on slow connections */}
+      <Suspense fallback={<ProceduralBustFallback accentColor={sculpture.accentColor} />}>
         <SculptureModel
           modelUrl={sculpture.modelUrl}
           accentColor={sculpture.accentColor}
@@ -94,7 +96,7 @@ function ChamberScene({ sculpture }) {
 
       {/* Contact shadow floating below the sculpture */}
       <ContactShadows
-        opacity={0.5}
+        opacity={0.6}
         scale={10}
         blur={2}
         far={4}
@@ -111,7 +113,7 @@ function ChamberScene({ sculpture }) {
       <OrbitControls
         enablePan={false}
         enableZoom
-        minDistance={2.2}
+        minDistance={2.0}
         maxDistance={6.5}
         enableDamping
         dampingFactor={0.06}
@@ -257,7 +259,7 @@ export default function SculptureChamber() {
       style={{ background: '#0a0a0f' }}
     >
       <Canvas
-        camera={{ position: [0, 0.4, 4.0], fov: 45, near: 0.1, far: 100 }}
+        camera={{ position: [0, 0.4, 4.0], fov: 45, near: 0.05, far: 100 }}
         gl={{
           antialias: true,
           alpha: false,
