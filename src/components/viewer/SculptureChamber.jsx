@@ -6,7 +6,7 @@ import * as THREE from 'three';
 
 import useMuseumStore from '../../store/useMuseumStore';
 import { SCULPTURES } from '../../data/sculptures';
-import SculptureModel, { ModelLoadingBadge, preloadSculptureModel } from './SculptureModel';
+import SculptureModel, { ModelLoadingBadge, ModelErrorBoundary, preloadSculptureModel } from './SculptureModel';
 import SculptureHotspots from './SculptureHotspots';
 import HotspotModal from './HotspotModal';
 
@@ -38,42 +38,34 @@ function LoadingOverlay({ name, accentColor }) {
   );
 }
 
-/* ─── Dramatic dark museum studio lighting ───────────────────────── */
+/* ─── Studio lighting that works for ALL models (light + dark textures) ─── */
 function StudioLighting({ accentColor }) {
   const accent = useMemo(() => new THREE.Color(accentColor), [accentColor]);
 
   return (
     <>
-      {/* Subtle ambient fill for dark museum tone */}
-      <ambientLight intensity={0.4} color="#f8fafc" />
+      {/* Hemisphere light guarantees no mesh is fully black — sky vs ground */}
+      <hemisphereLight intensity={0.7} color="#e2e8f0" groundColor="#1e293b" />
 
-      {/* Dramatic overhead spotlight */}
-      <spotLight
-        position={[0, 6, 2.5]}
-        angle={0.48}
-        penumbra={0.8}
-        intensity={3.2}
-        castShadow
-        shadow-mapSize={[1024, 1024]}
-        shadow-bias={-0.0004}
-        color="#ffffff"
-      />
-
-      {/* Strong directional key light */}
+      {/* Strong overhead key light */}
       <directionalLight
-        position={[3.5, 3.2, 4]}
-        intensity={1.8}
+        position={[0, 8, 4]}
+        intensity={2.2}
         color="#ffffff"
         castShadow
         shadow-mapSize={[1024, 1024]}
+        shadow-bias={-0.0003}
       />
 
-      {/* Soft directional fill */}
-      <directionalLight position={[-3, 1.5, 2.5]} intensity={0.65} color="#94a3b8" />
+      {/* Front fill */}
+      <directionalLight position={[5, 4, 7]} intensity={1.6} color="#f1f5f9" />
 
-      {/* Warm rim lights matching philosopher's accent color */}
-      <pointLight position={[-4, 2, -2.5]} intensity={1.6} color={accent} />
-      <pointLight position={[4, -1, -2.5]} intensity={0.8} color={accent} />
+      {/* Soft back-left counter fill */}
+      <directionalLight position={[-5, -2, -5]} intensity={0.8} color="#94a3b8" />
+
+      {/* Warm accent rim lights per thinker */}
+      <pointLight position={[-4, 2, -2]} intensity={1.4} color={accent} />
+      <pointLight position={[4, -1, -2]} intensity={0.7} color={accent} />
     </>
   );
 }
@@ -84,14 +76,15 @@ function ChamberScene({ sculpture }) {
     <>
       <StudioLighting accentColor={sculpture.accentColor} />
 
-      {/* Auto-centered 3D sculpture model floating cleanly at (0, 0, 0) */}
-      {/* ModelLoadingBadge: in-Canvas spinner so the scene never goes blank */}
-      <Suspense fallback={<ModelLoadingBadge accentColor={sculpture.accentColor} />}>
-        <SculptureModel
-          modelUrl={sculpture.modelUrl}
-          accentColor={sculpture.accentColor}
-        />
-      </Suspense>
+      {/* Model wrapped in its own ErrorBoundary — failed loads show fallback, not blank */}
+      <ModelErrorBoundary accentColor={sculpture.accentColor} modelUrl={sculpture.modelUrl}>
+        <Suspense fallback={<ModelLoadingBadge accentColor={sculpture.accentColor} />}>
+          <SculptureModel
+            modelUrl={sculpture.modelUrl}
+            accentColor={sculpture.accentColor}
+          />
+        </Suspense>
+      </ModelErrorBoundary>
 
       {/* Contact shadow floating below the sculpture */}
       <ContactShadows

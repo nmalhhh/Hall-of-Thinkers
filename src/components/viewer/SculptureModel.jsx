@@ -1,27 +1,26 @@
-import { Component, useLayoutEffect, useMemo, useRef } from 'react';
-import { useGLTF, Html } from '@react-three/drei';
+import { Component, useLayoutEffect, useMemo } from 'react';
+import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import ProceduralBustFallback from './ProceduralBustFallback';
 
-/* ─── Configure Draco decoder (required for marx.glb & any KHR_draco file) ── */
-// Must be called at module level, before any useGLTF calls.
+/* ─── Draco decoder — required for KHR_draco_mesh_compression (e.g. marx.glb) ── */
 useGLTF.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
 
 /* ─── Error Boundary ─────────────────────────────────────────────── */
 export class ModelErrorBoundary extends Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false, errMsg: '' };
+    this.state = { hasError: false };
   }
 
-  static getDerivedStateFromError(error) {
-    return { hasError: true, errMsg: error?.message ?? 'Unknown error' };
+  static getDerivedStateFromError() {
+    return { hasError: true };
   }
 
   componentDidCatch(error) {
     console.warn(
-      '[SculptureModel] GLB load/decode error — using procedural fallback.\n',
-      error?.message
+      `[SculptureModel] Failed to load: ${this.props.modelUrl}\n`,
+      error?.message ?? error
     );
   }
 
@@ -33,43 +32,41 @@ export class ModelErrorBoundary extends Component {
   }
 }
 
-/* ─── Inner GLBModel ─────────────────────────────────────────────── */
-/**
- * Clones the scene on every mount so switching between sculptures
- * (which share the same GLTF cache via useGLTF) never causes
- * transform or material state to bleed between instances.
- *
- * Draco decoder is configured at module-top so marx.glb unpacks fine.
- */
+/* ─── Inner GLB loader ───────────────────────────────────────────── */
 function GLBModel({ modelUrl }) {
-  // useDraco = true (second arg) enables Draco decoding support
+  // true = enable Draco decoder support
   const { scene } = useGLTF(modelUrl, true);
-  const groupRef  = useRef();
 
-  // Clone so multiple mounts (current + adjacent preload) don't share transforms
-  const clonedScene = useMemo(() => scene.clone(true), [scene]);
+  // Deep clone so multiple mounts (cached GLTF) never share transform state
+  const clonedScene = useMemo(() => {
+    if (!scene) return null;
+    console.info(`[SculptureModel] Loaded: ${modelUrl}`);
+    return scene.clone(true);
+  }, [scene, modelUrl]);
 
   useLayoutEffect(() => {
     if (!clonedScene) return;
 
-    // 1. True bounding box on the cloned geometry
+    // 1. Compute true bounding box
     const box    = new THREE.Box3().setFromObject(clonedScene);
     const size   = new THREE.Vector3();
     const center = new THREE.Vector3();
     box.getSize(size);
     box.getCenter(center);
 
-    // 2. Uniform scale → max dimension = 2.4 world units
-    const maxDim      = Math.max(size.x, size.y, size.z) || 1;
-    const targetScale = 2.4 / maxDim;
+    // 2. Guard against empty / degenerate meshes
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const targetScale = maxDim > 0.001 ? 2.5 / maxDim : 1;
     clonedScene.scale.setScalar(targetScale);
 
-    // 3. Shift so the geometric center is strictly at (0, 0, 0)
-    clonedScene.position.x = -center.x * targetScale;
-    clonedScene.position.y = -center.y * targetScale;
-    clonedScene.position.z = -center.z * targetScale;
+    // 3. Translate so the geometric center sits exactly at world (0, 0, 0)
+    clonedScene.position.set(
+      -center.x * targetScale,
+      -center.y * targetScale,
+      -center.z * targetScale
+    );
 
-    // 4. Shadows + material optimisation for dark studio lighting
+    // 4. Shadows + material visibility fix
     clonedScene.traverse((child) => {
       if (!child.isMesh) return;
       child.castShadow    = true;
@@ -77,21 +74,27 @@ function GLBModel({ modelUrl }) {
       const mats = Array.isArray(child.material) ? child.material : [child.material];
       mats.forEach((mat) => {
         if (!mat) return;
-        mat.roughness    = 0.38;
-        mat.metalness    = 0.08;
-        mat.needsUpdate  = true;
+        mat.side        = THREE.FrontSide; // correct for well-formed meshes; prevents z-fighting
+        mat.roughness   = 0.38;
+        mat.metalness   = 0.08;
+        mat.needsUpdate = true;
       });
     });
+
+    console.info(
+      `[SculptureModel] Centered: scale=${targetScale.toFixed(3)}, ` +
+      `center=(${center.x.toFixed(2)}, ${center.y.toFixed(2)}, ${center.z.toFixed(2)})`
+    );
   }, [clonedScene]);
 
-  return (
-    <group ref={groupRef}>
-      <primitive object={clonedScene} />
-    </group>
-  );
+  if (!clonedScene) return null;
+
+  return <primitive object={clonedScene} />;
 }
 
-/* ─── 3D loading badge (shown inside the Canvas while Suspense waits) ── */
+/* ─── In-Canvas loading badge (used as Suspense fallback) ──────────── */
+import { Html } from '@react-three/drei';
+
 export function ModelLoadingBadge({ accentColor = '#888' }) {
   return (
     <Html center position={[0, 0, 0]} zIndexRange={[200, 300]}>
@@ -100,15 +103,15 @@ export function ModelLoadingBadge({ accentColor = '#888' }) {
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          gap: '10px',
+          gap: 10,
           pointerEvents: 'none',
+          userSelect: 'none',
         }}
       >
-        {/* Spinning ring */}
         <div
           style={{
-            width: 48,
-            height: 48,
+            width: 44,
+            height: 44,
             borderRadius: '50%',
             border: `3px solid ${accentColor}22`,
             borderTopColor: accentColor,
@@ -123,7 +126,7 @@ export function ModelLoadingBadge({ accentColor = '#888' }) {
             letterSpacing: '0.2em',
             textTransform: 'uppercase',
             color: accentColor,
-            opacity: 0.85,
+            opacity: 0.8,
           }}
         >
           Đang tải…
@@ -140,13 +143,13 @@ export function SculptureModel({ modelUrl, accentColor = '#888888' }) {
   }
 
   return (
-    <ModelErrorBoundary accentColor={accentColor}>
+    <ModelErrorBoundary accentColor={accentColor} modelUrl={modelUrl}>
       <GLBModel modelUrl={modelUrl} />
     </ModelErrorBoundary>
   );
 }
 
-/* ─── Preload helper — call for adjacent models ─────────────────── */
+/* ─── Preload helper for adjacent models ────────────────────────── */
 export function preloadSculptureModel(modelUrl) {
   if (modelUrl) useGLTF.preload(modelUrl);
 }

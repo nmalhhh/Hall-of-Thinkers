@@ -2,15 +2,15 @@
  * SCULPTURES — The Hall of Thinkers
  * 9 entries mapped to local .glb files in public/models/
  *
- * modelUrl uses import.meta.env.BASE_URL so it correctly resolves to:
- *   - Dev:  /models/<name>.glb
- *   - Prod: /Hall-of-Thinkers/models/<name>.glb
+ * getModelUrl() uses import.meta.env.BASE_URL (injected by Vite at build time)
+ * and collapses any accidental double-slashes, so paths are always correct:
+ *   - Dev local:   /models/socrates.glb
+ *   - GitHub Pages: /Hall-of-Thinkers/models/socrates.glb
  *
- * Aligned with MLN111 curriculum (Chương 1, 2, 3 - NXB Chính trị quốc gia Sự thật)
+ * Aligned with MLN111 curriculum (Chương 1, 2, 3 — NXB Chính trị quốc gia Sự thật)
  */
-const BASE = import.meta.env.BASE_URL.endsWith('/')
-  ? import.meta.env.BASE_URL
-  : `${import.meta.env.BASE_URL}/`;
+const getModelUrl = (fileName) =>
+  `${import.meta.env.BASE_URL}models/${fileName}`.replace(/\/+/g, '/');
 
 export const SCULPTURES = [
   {
@@ -24,7 +24,7 @@ export const SCULPTURES = [
     accentColor: '#f97316',
     imageUrl:
       'https://upload.wikimedia.org/wikipedia/commons/thumb/b/bc/Socrate_du_Louvre.jpg/480px-Socrate_du_Louvre.jpg',
-    modelUrl: `${BASE}models/socrates.glb`,
+    modelUrl: getModelUrl('socrates.glb'),
     hotspots: [
       {
         id: 's1',
@@ -53,7 +53,7 @@ export const SCULPTURES = [
     accentColor: '#3b82f6',
     imageUrl:
       'https://upload.wikimedia.org/wikipedia/commons/thumb/8/88/Plato_Silanion_Musei_Capitolini_MC1377.jpg/480px-Plato_Silanion_Musei_Capitolini_MC1377.jpg',
-    modelUrl: `${BASE}models/plato.glb`,
+    modelUrl: getModelUrl('plato.glb'),
     hotspots: [
       {
         id: 'p1',
@@ -82,7 +82,7 @@ export const SCULPTURES = [
     accentColor: '#10b981',
     imageUrl:
       'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ae/Aristotle_Altemps_Inv8575.jpg/480px-Aristotle_Altemps_Inv8575.jpg',
-    modelUrl: `${BASE}models/aristotle.glb`,
+    modelUrl: getModelUrl('aristotle.glb'),
     hotspots: [
       {
         id: 'a1',
@@ -111,7 +111,7 @@ export const SCULPTURES = [
     accentColor: '#a855f7',
     imageUrl:
       'https://upload.wikimedia.org/wikipedia/commons/thumb/0/08/Hegel_portrait_by_Schlesinger_1831.jpg/480px-Hegel_portrait_by_Schlesinger_1831.jpg',
-    modelUrl: `${BASE}models/hegel.glb`,
+    modelUrl: getModelUrl('hegel.glb'),
     hotspots: [
       {
         id: 'h1',
@@ -140,7 +140,7 @@ export const SCULPTURES = [
     accentColor: '#eab308',
     imageUrl:
       "https://upload.wikimedia.org/wikipedia/commons/thumb/8/80/Michelangelo%27s_David_-_right_view_2.jpg/480px-Michelangelo%27s_David_-_right_view_2.jpg",
-    modelUrl: `${BASE}models/david.glb`,
+    modelUrl: getModelUrl('david.glb'),
     hotspots: [
       {
         id: 'd1',
@@ -170,7 +170,7 @@ export const SCULPTURES = [
     accentColor: '#ef4444',
     imageUrl:
       'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d4/Karl_Marx_001.jpg/480px-Karl_Marx_001.jpg',
-    modelUrl: `${BASE}models/marx.glb`,
+    modelUrl: getModelUrl('marx.glb'),
     hotspots: [
       {
         id: 'm1',
@@ -199,7 +199,7 @@ export const SCULPTURES = [
     accentColor: '#dc2626',
     imageUrl:
       'https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Lenin_CL.jpg/480px-Lenin_CL.jpg',
-    modelUrl: `${BASE}models/lenin.glb`,
+    modelUrl: getModelUrl('lenin.glb'),
     hotspots: [
       {
         id: 'l1',
@@ -228,7 +228,7 @@ export const SCULPTURES = [
     accentColor: '#06b6d4',
     imageUrl:
       'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6f/The_Thinker%2C_Rodin_Museum.jpg/480px-The_Thinker%2C_Rodin_Museum.jpg',
-    modelUrl: `${BASE}models/thinker.glb`,
+    modelUrl: getModelUrl('thinker.glb'),
     hotspots: [
       {
         id: 't1',
@@ -257,7 +257,7 @@ export const SCULPTURES = [
     accentColor: '#f97316',
     imageUrl:
       'https://upload.wikimedia.org/wikipedia/commons/thumb/6/69/Prometheus_carrying_fire_%281702%29_by_Nicolas-S%C3%A9bastien_Adam_-_Louvre_MR_1744.jpg/480px-Prometheus_carrying_fire_%281702%29_by_Nicolas-S%C3%A9bastien_Adam_-_Louvre_MR_1744.jpg',
-    modelUrl: `${BASE}models/prometheus.glb`,
+    modelUrl: getModelUrl('prometheus.glb'),
     hotspots: [
       {
         id: 'pr1',
